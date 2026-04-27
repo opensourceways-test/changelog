@@ -88,9 +88,11 @@ jobs:
           - 第一行：开发类型（api-only/frontend-only/both）
           - 第二行及之后：简要说明判断理由"
 
-          opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
-          
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set +e
+          opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Parse analysis result
         if: steps.check-label.outputs.has_accept == 'true'
@@ -139,15 +141,12 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           CHANGELOG_REPO: ${{ github.repository }}
         run: |
-          PAYLOAD=$(cat << EOF
-          {
-            "issue_number": "$ISSUE_NUMBER",
-            "issue_title": "$ISSUE_TITLE",
-            "issue_body": "$ISSUE_BODY",
-            "source_repo": "$CHANGELOG_REPO"
-          }
-          EOF
-          )
+          PAYLOAD=$(jq -n \
+            --arg num "$ISSUE_NUMBER" \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" \
+            --arg repo "$CHANGELOG_REPO" \
+            '{issue_number: $num, issue_title: $title, issue_body: $body, source_repo: $repo}')
           
           gh api repos/$APIMAGIC_REPO/dispatches \
             -f event_type='start-api-dev' \
@@ -164,16 +163,14 @@ jobs:
           CHANGELOG_REPO: ${{ github.repository }}
           DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
         run: |
-          PAYLOAD=$(cat << EOF
-          {
-            "issue_number": "$ISSUE_NUMBER",
-            "issue_title": "$ISSUE_TITLE",
-            "issue_body": "$ISSUE_BODY",
-            "source_repo": "$CHANGELOG_REPO",
-            "needs_api": "$([ "$DEV_TYPE" = "both" ] && echo "true" || echo "false")"
-          }
-          EOF
-          )
+          NEEDS_API=$([ "$DEV_TYPE" = "both" ] && echo "true" || echo "false")
+          PAYLOAD=$(jq -n \
+            --arg num "$ISSUE_NUMBER" \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" \
+            --arg repo "$CHANGELOG_REPO" \
+            --argjson needs_api "$NEEDS_API" \
+            '{issue_number: $num, issue_title: $title, issue_body: $body, source_repo: $repo, needs_api: $needs_api}')
           
           gh api repos/$DATASTAT_WEBSITE_REPO/dispatches \
             -f event_type='start-frontend-dev' \
