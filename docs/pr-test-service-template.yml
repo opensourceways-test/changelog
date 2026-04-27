@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Pre-cleanup workspace
         run: |
-          sudo rm -rf $GITHUB_WORKSPACE || true
+          sudo rm -rf $GITHUB_WORKSPACE
           mkdir -p $GITHUB_WORKSPACE
           sudo chown -R 1000:1000 $GITHUB_WORKSPACE
       
@@ -39,6 +39,9 @@ jobs:
       
       - uses: actions/checkout@v4
       
+      - name: Fix permissions for container
+        run: sudo chown -R 1000:1000 $GITHUB_WORKSPACE
+      
       - name: Start test service
         env:
           PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
@@ -48,9 +51,12 @@ jobs:
           mkdir -p /tmp/pr-services/m2
           sudo chown -R 1000:1000 /tmp/pr-services
           
+          sudo rm -rf $GITHUB_WORKSPACE/target || true
+          
           docker run -d \
             --name apimagic-test-$PR_NUMBER \
             --network host \
+            --user 1000:1000 \
             -v $GITHUB_WORKSPACE:/app \
             -v /tmp/pr-services:/tmp/pr-services \
             -w /app \
@@ -67,7 +73,7 @@ jobs:
             fi
             if [ $i -eq 30 ]; then
               echo "Service failed to start"
-              docker logs apimagic-test-$PR_NUMBER 2>&1 | tail -50
+              docker logs apimagic-test-$PR_NUMBER 2>&1 | tail -100
               docker stop apimagic-test-$PR_NUMBER || true
               docker rm apimagic-test-$PR_NUMBER || true
               exit 1
