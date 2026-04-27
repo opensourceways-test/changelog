@@ -135,7 +135,7 @@ jobs:
         if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'api-only' || steps.parse-result.outputs.dev_type == 'both')
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
-          APIMAGIC_REPO: ${{ secrets.APIMAGIC_REPO }}
+          APIMAGIC_REPO: ${{ github.repository_owner }}/APIMagic
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
@@ -156,7 +156,7 @@ jobs:
         if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'frontend-only' || steps.parse-result.outputs.dev_type == 'both')
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
-          DATASTAT_WEBSITE_REPO: ${{ secrets.DATASTAT_WEBSITE_REPO }}
+          DATASTAT_WEBSITE_REPO: ${{ github.repository_owner }}/datastat-website
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
