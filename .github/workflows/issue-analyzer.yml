@@ -141,16 +141,12 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           CHANGELOG_REPO: ${{ github.repository }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg num "$ISSUE_NUMBER" \
-            --arg title "$ISSUE_TITLE" \
-            --arg body "$ISSUE_BODY" \
-            --arg repo "$CHANGELOG_REPO" \
-            '{issue_number: $num, issue_title: $title, issue_body: $body, source_repo: $repo}')
-          
           gh api repos/$APIMAGIC_REPO/dispatches \
             -f event_type='start-api-dev' \
-            -F client_payload="$PAYLOAD"
+            -f 'client_payload[issue_number]'="$ISSUE_NUMBER" \
+            -f 'client_payload[issue_title]'="$ISSUE_TITLE" \
+            -f 'client_payload[issue_body]'="$ISSUE_BODY" \
+            -f 'client_payload[source_repo]'="$CHANGELOG_REPO"
 
       - name: Trigger datastat-website repository
         if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'frontend-only' || steps.parse-result.outputs.dev_type == 'both')
@@ -164,17 +160,13 @@ jobs:
           DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
         run: |
           NEEDS_API=$([ "$DEV_TYPE" = "both" ] && echo "true" || echo "false")
-          PAYLOAD=$(jq -n \
-            --arg num "$ISSUE_NUMBER" \
-            --arg title "$ISSUE_TITLE" \
-            --arg body "$ISSUE_BODY" \
-            --arg repo "$CHANGELOG_REPO" \
-            --argjson needs_api "$NEEDS_API" \
-            '{issue_number: $num, issue_title: $title, issue_body: $body, source_repo: $repo, needs_api: $needs_api}')
-          
           gh api repos/$DATASTAT_WEBSITE_REPO/dispatches \
             -f event_type='start-frontend-dev' \
-            -F client_payload="$PAYLOAD"
+            -f 'client_payload[issue_number]'="$ISSUE_NUMBER" \
+            -f 'client_payload[issue_title]'="$ISSUE_TITLE" \
+            -f 'client_payload[issue_body]'="$ISSUE_BODY" \
+            -f 'client_payload[source_repo]'="$CHANGELOG_REPO" \
+            -F 'client_payload[needs_api]'="$NEEDS_API"
 
       - name: Post analysis result to issue
         if: steps.check-label.outputs.has_accept == 'true'
