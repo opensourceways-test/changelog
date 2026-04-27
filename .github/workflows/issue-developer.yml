@@ -43,14 +43,11 @@ jobs:
           issue-number: ${{ github.event.issue.number }}
           github-token: ${{ github.token }}
 
-      - name: Copy design documents
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          mkdir -p /tmp/opencode
-          cp docs/issues/$ISSUE_NUMBER/requirements.md /tmp/opencode/ 2>/dev/null || true
-          cp docs/issues/$ISSUE_NUMBER/design.md /tmp/opencode/ 2>/dev/null || true
-          cp docs/issues/$ISSUE_NUMBER/dev_type.txt /tmp/opencode/ 2>/dev/null || true
+      - name: Extract design documents
+        uses: ./.github/actions/extract-design-docs
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          github-token: ${{ github.token }}
 
       - name: Determine dev type
         id: dev-type

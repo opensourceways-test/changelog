@@ -1,0 +1,71 @@
+name: 'Extract Design Documents'
+description: 'Extract requirements and design documents from issue comments'
+inputs:
+  issue-number:
+    description: 'Issue number'
+    required: true
+  github-token:
+    description: 'GitHub token'
+    required: true
+outputs:
+  has-docs:
+    description: 'Whether design documents were found'
+    value: ${{ steps.extract.outputs.has_docs }}
+runs:
+  using: composite
+  steps:
+    - name: Extract design documents
+      id: extract
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+      run: |
+        mkdir -p /tmp/opencode
+        
+        python3 << 'PYTHON_SCRIPT'
+        import subprocess
+        import json
+        
+        issue_number = "${{ inputs.issue-number }}"
+        
+        result = subprocess.run(
+            ["gh", "issue", "view", issue_number, "--json", "comments,labels"],
+            capture_output=True,
+            text=True
+        )
+        
+        data = json.loads(result.stdout)
+        
+        req_comments = [c['body'] for c in data['comments'] 
+                        if c['body'].startswith('<!-- REQUIREMENTS_DOC -->')]
+        design_comments = [c['body'] for c in data['comments'] 
+                          if c['body'].startswith('<!-- DESIGN_DOC -->')]
+        
+        with open('/tmp/opencode/requirements.md', 'w') as f:
+            if req_comments:
+                f.write(req_comments[-1].replace('<!-- REQUIREMENTS_DOC -->\n', '', 1))
+            else:
+                f.write('')
+        
+        with open('/tmp/opencode/design.md', 'w') as f:
+            if design_comments:
+                f.write(design_comments[-1].replace('<!-- DESIGN_DOC -->\n', '', 1))
+            else:
+                f.write('')
+        
+        labels = [l['name'] for l in data['labels']]
+        with open('/tmp/opencode/dev_type.txt', 'w') as f:
+            if 'api-only' in labels:
+                f.write('api-only')
+            elif 'frontend-only' in labels:
+                f.write('frontend-only')
+            else:
+                f.write('both')
+        
+        has_docs = 'true' if (req_comments and design_comments) else 'false'
+        with open('/tmp/opencode/.has_docs', 'w') as f:
+            f.write(has_docs)
+        PYTHON_SCRIPT
+        
+        echo "has_docs=$(cat /tmp/opencode/.has_docs)" >> $GITHUB_OUTPUT

@@ -10,7 +10,7 @@ concurrency:
 
 permissions:
   issues: write
-  contents: write
+  contents: read
 
 jobs:
   analyze:
@@ -88,23 +88,6 @@ jobs:
           1. /tmp/opencode/requirements.md（需求分析）
           2. /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
 
-      - name: Commit design documents
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          mkdir -p docs/issues/$ISSUE_NUMBER
-          cp /tmp/opencode/requirements.md docs/issues/$ISSUE_NUMBER/ 2>/dev/null || true
-          cp /tmp/opencode/design.md docs/issues/$ISSUE_NUMBER/ 2>/dev/null || true
-          cp /tmp/opencode/dev_type.txt docs/issues/$ISSUE_NUMBER/ 2>/dev/null || true
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/issues/$ISSUE_NUMBER/
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "docs: add design documents for issue #$ISSUE_NUMBER"
-            git push
-          fi
-
       - name: Add dev_type label
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,5 +106,14 @@ jobs:
           
           请审核后添加 \`approved\` 标签触发开发。"
           
-          [ -f /tmp/opencode/requirements.md ] && gh issue comment $ISSUE_NUMBER --body "$(cat /tmp/opencode/requirements.md)"
-          [ -f /tmp/opencode/design.md ] && gh issue comment $ISSUE_NUMBER --body "$(cat /tmp/opencode/design.md)"
+          if [ -f /tmp/opencode/requirements.md ]; then
+            echo '<!-- REQUIREMENTS_DOC -->' > /tmp/body.txt
+            cat /tmp/opencode/requirements.md >> /tmp/body.txt
+            gh issue comment $ISSUE_NUMBER --body-file /tmp/body.txt
+          fi
+          
+          if [ -f /tmp/opencode/design.md ]; then
+            echo '<!-- DESIGN_DOC -->' > /tmp/body.txt
+            cat /tmp/opencode/design.md >> /tmp/body.txt
+            gh issue comment $ISSUE_NUMBER --body-file /tmp/body.txt
+          fi
