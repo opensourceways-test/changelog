@@ -1,0 +1,93 @@
+name: PR Test Service
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number (manual trigger)'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  start-service:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    
+    steps:
+      - name: Pre-cleanup workspace
+        run: |
+          sudo rm -rf $GITHUB_WORKSPACE || true
+          mkdir -p $GITHUB_WORKSPACE
+          sudo chown -R 1000:1000 $GITHUB_WORKSPACE
+      
+      - name: Determine PR number
+        id: pr-info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          PORT=$((9999 + PR_NUMBER))
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "port=$PORT" >> $GITHUB_OUTPUT
+      
+      - uses: actions/checkout@v4
+      
+      - name: Start test service
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+          PORT: ${{ steps.pr-info.outputs.port }}
+        run: |
+          mkdir -p /tmp/pr-services
+          mkdir -p /tmp/pr-services/m2
+          sudo chown -R 1000:1000 /tmp/pr-services
+          
+          docker run -d \
+            --name apimagic-test-$PR_NUMBER \
+            --network host \
+            -v $GITHUB_WORKSPACE:/app \
+            -v /tmp/pr-services:/tmp/pr-services \
+            -w /app \
+            -e MAVEN_OPTS="-Dmaven.repo.local=/tmp/pr-services/m2/repository" \
+            ghcr.io/${{ github.repository_owner }}/opencode-dev:latest \
+            mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=$PORT --server.address=0.0.0.0 --magic-api.workspace=/tmp/pr-services/magic-api-$PR_NUMBER"
+          
+          echo "Starting service on port $PORT..."
+          
+          for i in {1..30}; do
+            if curl -s --max-time 2 http://localhost:$PORT/ > /dev/null 2>&1; then
+              echo "Service ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Service failed to start"
+              docker logs apimagic-test-$PR_NUMBER 2>&1 | tail -50
+              docker stop apimagic-test-$PR_NUMBER || true
+              docker rm apimagic-test-$PR_NUMBER || true
+              exit 1
+            fi
+            sleep 2
+          done
+          
+          echo "port=$PORT" > /tmp/pr-services/pr-$PR_NUMBER.info
+      
+      - name: Comment service URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+          PORT: ${{ steps.pr-info.outputs.port }}
+        run: |
+          gh pr comment $PR_NUMBER --body "## 🧪 测试服务已启动
+
+          **服务地址**: http://159.138.55.6:$PORT
+
+          接口列表可通过 MagicAPI UI 查看: http://159.138.55.6:$PORT/magic/web/index.html
+
+          > 服务将持续运行，如需停止请手动执行 \`Stop PR Test Service\` workflow。
+          "
