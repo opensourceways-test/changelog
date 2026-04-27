@@ -37,36 +37,23 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
         shell: bash
 
-      - name: Fetch issue
-        uses: ./.github/actions/fetch-issue
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          github-token: ${{ github.token }}
-
       - name: Extract design documents
+        id: extract
         uses: ./.github/actions/extract-design-docs
         with:
           issue-number: ${{ github.event.issue.number }}
           github-token: ${{ github.token }}
 
-      - name: Determine dev type
-        id: dev-type
-        shell: bash
-        run: |
-          DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt 2>/dev/null || echo "both")
-          case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
-          echo "dev_type=$DEV_TYPE" >> $GITHUB_OUTPUT
-
       - name: Checkout target repos for development
         uses: ./.github/actions/checkout-repos
         with:
-          dev-type: ${{ steps.dev-type.outputs.dev_type }}
+          dev-type: ${{ steps.extract.outputs.dev-type }}
           mode: full
           cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
       - name: Develop API
-        if: steps.dev-type.outputs.dev_type == 'api-only' || steps.dev-type.outputs.dev_type == 'both'
+        if: steps.extract.outputs.dev-type == 'api-only' || steps.extract.outputs.dev-type == 'both'
         id: api
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -103,7 +90,7 @@ jobs:
         shell: bash
 
       - name: Develop Frontend
-        if: steps.dev-type.outputs.dev_type == 'frontend-only' || steps.dev-type.outputs.dev_type == 'both'
+        if: steps.extract.outputs.dev-type == 'frontend-only' || steps.extract.outputs.dev-type == 'both'
         id: frontend
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -143,7 +130,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          DEV_TYPE: ${{ steps.dev-type.outputs.dev_type }}
+          DEV_TYPE: ${{ steps.extract.outputs.dev-type }}
           API_HAS: ${{ steps.api.outputs.has_changes }}
           FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
         run: |

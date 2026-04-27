@@ -21,8 +21,6 @@ jobs:
       env:
         HOME: /home/runner
     timeout-minutes: 10
-    outputs:
-      dev_type: ${{ steps.parse.outputs.dev_type }}
     
     steps:
       - name: Checkout changelog

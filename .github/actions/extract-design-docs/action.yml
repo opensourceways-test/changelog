@@ -1,5 +1,5 @@
 name: 'Extract Design Documents'
-description: 'Extract requirements and design documents from issue comments'
+description: 'Extract requirements, design documents and issue info from comments'
 inputs:
   issue-number:
     description: 'Issue number'
@@ -11,6 +11,9 @@ outputs:
   has-docs:
     description: 'Whether design documents were found'
     value: ${{ steps.extract.outputs.has_docs }}
+  dev-type:
+    description: 'Development type'
+    value: ${{ steps.extract.outputs.dev_type }}
 runs:
   using: composite
   steps:
@@ -30,7 +33,7 @@ runs:
         issue_number = "${{ inputs.issue-number }}"
         
         result = subprocess.run(
-            ["gh", "issue", "view", issue_number, "--json", "comments,labels"],
+            ["gh", "issue", "view", issue_number, "--json", "comments,labels,title,body"],
             capture_output=True,
             text=True
         )
@@ -54,18 +57,23 @@ runs:
             else:
                 f.write('')
         
+        with open('/tmp/opencode/title.txt', 'w') as f:
+            f.write(data.get('title', ''))
+        
+        with open('/tmp/opencode/body.txt', 'w') as f:
+            f.write(data.get('body', ''))
+        
         labels = [l['name'] for l in data['labels']]
+        dev_type = 'both'
+        if 'api-only' in labels:
+            dev_type = 'api-only'
+        elif 'frontend-only' in labels:
+            dev_type = 'frontend-only'
+        
         with open('/tmp/opencode/dev_type.txt', 'w') as f:
-            if 'api-only' in labels:
-                f.write('api-only')
-            elif 'frontend-only' in labels:
-                f.write('frontend-only')
-            else:
-                f.write('both')
+            f.write(dev_type)
         
         has_docs = 'true' if (req_comments and design_comments) else 'false'
-        with open('/tmp/opencode/.has_docs', 'w') as f:
-            f.write(has_docs)
+        print(f"has_docs={has_docs}")
+        print(f"dev_type={dev_type}")
         PYTHON_SCRIPT
-        
-        echo "has_docs=$(cat /tmp/opencode/.has_docs)" >> $GITHUB_OUTPUT
