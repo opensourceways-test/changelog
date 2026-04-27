@@ -134,14 +134,15 @@ jobs:
           FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
         run: |
           RESULT=""
+          NL=$'\n'
           if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
             if [ "$API_HAS" = "true" ]; then
               cd APIMagic
               PR=$(gh pr create --title "API for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
               cd ..
-              RESULT+="APIMagic PR: $PR\n"
+              RESULT="${RESULT}APIMagic PR: $PR${NL}"
             else
-              RESULT+="APIMagic: 无变更\n"
+              RESULT="${RESULT}APIMagic: 无变更${NL}"
             fi
           fi
           if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
@@ -149,10 +150,10 @@ jobs:
               cd datastat-website
               PR=$(gh pr create --title "Frontend for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
               cd ..
-              RESULT+="datastat-website PR: $PR\n"
+              RESULT="${RESULT}datastat-website PR: $PR${NL}"
             else
-              RESULT+="datastat-website: 无变更\n"
+              RESULT="${RESULT}datastat-website: 无变更${NL}"
             fi
           fi
-          gh issue comment $ISSUE_NUMBER --body "🚀 **开发完成**"$'\n\n'"$RESULT"
+          gh issue comment $ISSUE_NUMBER --body "🚀 **开发完成**${NL}${NL}${RESULT}"
         shell: bash
