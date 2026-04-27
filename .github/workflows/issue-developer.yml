@@ -1,0 +1,186 @@
+name: Issue Developer
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: issue-developer-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  develop:
+    if: github.event.label.name == 'approved' && github.event.issue.state == 'open'
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
+      env:
+        HOME: /home/runner
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout changelog
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        shell: bash
+
+      - name: Fetch issue
+        uses: ./.github/actions/fetch-issue
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          github-token: ${{ github.token }}
+
+      - name: Download requirements artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-requirements
+          path: /tmp/opencode
+        continue-on-error: true
+
+      - name: Download design artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-design
+          path: /tmp/opencode
+        continue-on-error: true
+
+      - name: Download dev_type artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-dev-type
+          path: /tmp/opencode
+        continue-on-error: true
+
+      - name: Determine dev type
+        id: dev-type
+        run: |
+          DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt 2>/dev/null || echo "both")
+          case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
+          echo "dev_type=$DEV_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Checkout target repos for development
+        uses: ./.github/actions/checkout-repos
+        with:
+          dev-type: ${{ steps.dev-type.outputs.dev_type }}
+          mode: full
+          cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
+          repository-owner: ${{ github.repository_owner }}
+
+      - name: Develop API
+        if: steps.dev-type.outputs.dev_type == 'api-only' || steps.dev-type.outputs.dev_type == 'both'
+        id: api
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          BRANCH="issue-$ISSUE_NUMBER-api"
+          cd APIMagic
+          git checkout -b $BRANCH 2>/dev/null || git checkout $BRANCH
+          git config --global --add safe.directory $GITHUB_WORKSPACE/APIMagic
+          
+          DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
+          REQ=$(cat /tmp/opencode/requirements.md 2>/dev/null || echo "")
+          TITLE=$(cat /tmp/opencode/title.txt 2>/dev/null || echo "")
+          BODY=$(cat /tmp/opencode/body.txt 2>/dev/null || echo "")
+          
+          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发 API：
+
+          Issue: $TITLE
+          $BODY
+          
+          设计方案: $DESIGN
+          需求分析: $REQ
+
+          参考 CLAUDE.md 和现有 .ms 文件格式，创建/修改 magic-api/api/ 下的接口文件。" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          
+          git checkout -- .github/workflows/ 2>/dev/null || true
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "API for issue #$ISSUE_NUMBER"
+            git push -u origin $BRANCH
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Develop Frontend
+        if: steps.dev-type.outputs.dev_type == 'frontend-only' || steps.dev-type.outputs.dev_type == 'both'
+        id: frontend
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          BRANCH="issue-$ISSUE_NUMBER-frontend"
+          cd datastat-website
+          git checkout -b $BRANCH 2>/dev/null || git checkout $BRANCH
+          git config --global --add safe.directory $GITHUB_WORKSPACE/datastat-website
+          
+          DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
+          REQ=$(cat /tmp/opencode/requirements.md 2>/dev/null || echo "")
+          TITLE=$(cat /tmp/opencode/title.txt 2>/dev/null || echo "")
+          BODY=$(cat /tmp/opencode/body.txt 2>/dev/null || echo "")
+          
+          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发前端：
+
+          Issue: $TITLE
+          $BODY
+          
+          设计方案: $DESIGN
+          需求分析: $REQ
+
+          参考 CLAUDE.md 目录结构，修改对应的 Vue 组件。" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          
+          git checkout -- .github/workflows/ 2>/dev/null || true
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Frontend for issue #$ISSUE_NUMBER"
+            git push -u origin $BRANCH
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Create PRs
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.dev-type.outputs.dev_type }}
+          API_HAS: ${{ steps.api.outputs.has_changes }}
+          FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
+        run: |
+          RESULT=""
+          if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            if [ "$API_HAS" = "true" ]; then
+              cd APIMagic
+              PR=$(gh pr create --title "API for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
+              cd ..
+              RESULT+="APIMagic PR: $PR\n"
+            else
+              RESULT+="APIMagic: 无变更\n"
+            fi
+          fi
+          if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            if [ "$FRONTEND_HAS" = "true" ]; then
+              cd datastat-website
+              PR=$(gh pr create --title "Frontend for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
+              cd ..
+              RESULT+="datastat-website PR: $PR\n"
+            else
+              RESULT+="datastat-website: 无变更\n"
+            fi
+          fi
+          gh issue comment $ISSUE_NUMBER --body "🚀 **开发完成**"$'\n\n'"$RESULT"
+        shell: bash
