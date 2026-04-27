@@ -54,11 +54,10 @@ jobs:
           case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
           echo "dev_type=$DEV_TYPE" >> $GITHUB_OUTPUT
 
-      - name: Checkout target repos for analysis
+      - name: Checkout target repos
         uses: ./.github/actions/checkout-repos
         with:
           dev-type: ${{ steps.parse.outputs.dev_type }}
-          mode: full
           cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 

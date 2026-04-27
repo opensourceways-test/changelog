@@ -44,11 +44,10 @@ jobs:
           issue-number: ${{ github.event.issue.number }}
           github-token: ${{ github.token }}
 
-      - name: Checkout target repos for development
+      - name: Checkout target repos
         uses: ./.github/actions/checkout-repos
         with:
           dev-type: ${{ steps.extract.outputs.dev-type }}
-          mode: full
           cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
