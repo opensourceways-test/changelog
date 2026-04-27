@@ -100,8 +100,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/issues/$ISSUE_NUMBER/
-          git commit -m "docs: add design documents for issue #$ISSUE_NUMBER" || true
-          git push
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "docs: add design documents for issue #$ISSUE_NUMBER"
+            git push
+          fi
 
       - name: Add dev_type label
         env:
