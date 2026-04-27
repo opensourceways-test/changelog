@@ -74,19 +74,19 @@ jobs:
         if: steps.check-label.outputs.has_accept == 'true'
         id: analyze
         run: |
-          MESSAGE="请分析以下 GitHub Issue，判断需要开发哪些仓库：
+          MESSAGE="请根据以下 GitHub Issue 进行需求和设计分析：
 
           Issue 内容：
           $(cat /tmp/opencode/issue_context.txt)
 
-          请判断该需求需要：
-          1. api-only - 只需要 APIMagic 开发 API
-          2. frontend-only - 只需要 datastat-website 开发前端
-          3. both - 同时需要 API 和前端开发
+          请执行以下操作：
+          1. 将需求分析报告写入 /tmp/opencode/requirements.md，包含：Issue 概述、需求详情、影响范围
+          2. 将设计方案文档写入 /tmp/opencode/design.md，包含：技术方案、实现步骤、验收标准
+          3. 判断需要开发哪些仓库，将结果写入 /tmp/opencode/dev_type.txt（只写一行：api-only/frontend-only/both）
 
-          将判断结果写入 /tmp/opencode/analysis_result.txt，格式：
-          - 第一行：开发类型（api-only/frontend-only/both）
-          - 第二行及之后：简要说明判断理由"
+          文件格式要求：
+          - 使用标准 Markdown 格式
+          - 每个文件以一级标题开始"
 
           set +e
           opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false
@@ -97,11 +97,9 @@ jobs:
       - name: Parse analysis result
         if: steps.check-label.outputs.has_accept == 'true'
         id: parse-result
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          if [ -f /tmp/opencode/analysis_result.txt ] && [ -s /tmp/opencode/analysis_result.txt ]; then
-            DEV_TYPE=$(head -1 /tmp/opencode/analysis_result.txt)
+          if [ -f /tmp/opencode/dev_type.txt ] && [ -s /tmp/opencode/dev_type.txt ]; then
+            DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt)
             
             case "$DEV_TYPE" in
               api-only|frontend-only|both)
@@ -109,17 +107,10 @@ jobs:
                 ;;
               *)
                 echo "dev_type=both" >> $GITHUB_OUTPUT
-                DEV_TYPE="both"
                 ;;
             esac
-            
-            ANALYSIS_REASON=$(tail -n +2 /tmp/opencode/analysis_result.txt)
-            echo "analysis_reason<<EOF" >> $GITHUB_OUTPUT
-            echo "$ANALYSIS_REASON" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "dev_type=both" >> $GITHUB_OUTPUT
-            echo "analysis_reason=AI 分析失败，默认触发两个仓库" >> $GITHUB_OUTPUT
           fi
 
       - name: Add label to issue
@@ -174,25 +165,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
-          ANALYSIS_REASON: ${{ steps.parse-result.outputs.analysis_reason }}
           EXIT_CODE: ${{ steps.analyze.outputs.exit_code }}
         run: |
           if [ "$EXIT_CODE" != "0" ]; then
             COMMENT="⚠️ **AI 分析出错** (Exit code: $EXIT_CODE)
 
           默认触发所有仓库开发。"
+            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$COMMENT"
           else
-            COMMENT="✅ **需求分析完成**
+            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "✅ **需求分析完成**
 
           **开发类型**: $DEV_TYPE
 
-          **判断理由**:
-          $ANALYSIS_REASON
-
           已触发目标仓库开始开发。"
+            
+            if [ -f /tmp/opencode/requirements.md ] && [ -s /tmp/opencode/requirements.md ]; then
+              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/requirements.md)"
+            fi
+            
+            if [ -f /tmp/opencode/design.md ] && [ -s /tmp/opencode/design.md ]; then
+              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/design.md)"
+            fi
           fi
-          
-          gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$COMMENT"
 
       - name: Cleanup
         if: always()
