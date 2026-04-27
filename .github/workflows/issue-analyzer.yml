@@ -68,23 +68,24 @@ jobs:
         env:
           DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
         run: |
-          REPO_INFO=""
+          TARGET_DIRS=""
           if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
-            REPO_INFO+="APIMagic API目录: $(ls APIMagic/magic-api/api/ 2>/dev/null || true)\n"
+            TARGET_DIRS+="APIMagic/magic-api/api "
           fi
           if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
-            REPO_INFO+="datastat-website views: $(ls datastat-website/src/views/ 2>/dev/null || true)\n"
+            TARGET_DIRS+="datastat-website/src/views datastat-website/src/components"
           fi
           
-          opencode run "根据 Issue 和目标仓库结构生成设计文档：
+          opencode run "根据 Issue 生成设计文档，只关注以下目录：
+          $TARGET_DIRS
 
           Issue: $(cat /tmp/opencode/issue.txt)
 
-          仓库结构: $REPO_INFO
-
-          写入：
-          1. /tmp/opencode/requirements.md（需求分析）
-          2. /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          要求：
+          1. 不要执行 git ls-tree 或全局 Glob 搜索
+          2. 只读取指定目录下的文件
+          3. 写入 /tmp/opencode/requirements.md（需求分析）
+          4. 写入 /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
 
       - name: Add dev_type label
         env:
