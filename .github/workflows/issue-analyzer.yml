@@ -41,6 +41,7 @@ jobs:
 
       - name: Determine dev type
         id: dev-type
+        shell: bash
         run: |
           opencode run "判断以下 Issue 需要开发哪些仓库（只写一行：api-only/frontend-only/both）：
 
@@ -49,6 +50,7 @@ jobs:
 
       - name: Parse dev type
         id: parse
+        shell: bash
         run: |
           DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt 2>/dev/null || echo "both")
           case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
@@ -64,6 +66,7 @@ jobs:
 
       - name: Generate design documents
         id: design
+        shell: bash
         env:
           DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
         run: |
@@ -110,6 +113,7 @@ jobs:
         run: gh issue edit $ISSUE_NUMBER --add-label "$DEV_TYPE"
 
       - name: Comment design documents
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}

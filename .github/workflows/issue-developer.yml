@@ -66,6 +66,7 @@ jobs:
 
       - name: Determine dev type
         id: dev-type
+        shell: bash
         run: |
           DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt 2>/dev/null || echo "both")
           case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
