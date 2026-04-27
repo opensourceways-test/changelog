@@ -1,0 +1,211 @@
+name: Issue Analyzer
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: analyze-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  analyze-issue:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
+      env:
+        HOME: /home/runner
+    timeout-minutes: 30
+    
+    steps:
+      - name: Check if label is accept
+        id: check-label
+        env:
+          ADDED_LABEL: ${{ github.event.label.name }}
+          ISSUE_STATE: ${{ github.event.issue.state }}
+        run: |
+          if [ "$ISSUE_STATE" != "open" ]; then
+            echo "Skipping: issue state is '$ISSUE_STATE', not 'open'"
+            exit 0
+          fi
+          
+          if [ "$ADDED_LABEL" != "accept" ]; then
+            echo "Skipping: added label is '$ADDED_LABEL', not 'accept'"
+            exit 0
+          fi
+          echo "has_accept=true" >> $GITHUB_OUTPUT
+
+      - name: Exit if not accept
+        if: steps.check-label.outputs.has_accept != 'true'
+        run: exit 0
+
+      - name: Setup opencode credentials
+        if: steps.check-label.outputs.has_accept == 'true'
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          mkdir -p $HOME/.local/share/opencode/log
+          mkdir -p $HOME/.config/opencode
+          printf '{"alibaba-cn":{"type":"api","key":"%s"}}\n' "$OPENCODE_API_KEY" > $HOME/.local/share/opencode/auth.json
+          printf '{"$schema":"https://opencode.ai/config.json","provider":{},"agent":{},"mode":{},"command":{},"username":"runner"}\n' > $HOME/.config/opencode/opencode.json
+
+      - name: Prepare issue data
+        if: steps.check-label.outputs.has_accept == 'true'
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/opencode
+          
+          ISSUE_TITLE=$(gh issue view $ISSUE_NUMBER -R ${{ github.repository }} --json title -q '.title')
+          ISSUE_BODY=$(gh issue view $ISSUE_NUMBER -R ${{ github.repository }} --json body -q '.body')
+          
+          cat > /tmp/opencode/issue_context.txt << EOF
+          Issue #${{ env.ISSUE_NUMBER }}: $ISSUE_TITLE
+          
+          $ISSUE_BODY
+          EOF
+
+      - name: Run opencode to analyze issue
+        if: steps.check-label.outputs.has_accept == 'true'
+        id: analyze
+        run: |
+          MESSAGE="请分析以下 GitHub Issue，判断需要开发哪些仓库：
+
+          Issue 内容：
+          $(cat /tmp/opencode/issue_context.txt)
+
+          请判断该需求需要：
+          1. api-only - 只需要 APIMagic 开发 API
+          2. frontend-only - 只需要 datastat-website 开发前端
+          3. both - 同时需要 API 和前端开发
+
+          将判断结果写入 /tmp/opencode/analysis_result.txt，格式：
+          - 第一行：开发类型（api-only/frontend-only/both）
+          - 第二行及之后：简要说明判断理由"
+
+          opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Parse analysis result
+        if: steps.check-label.outputs.has_accept == 'true'
+        id: parse-result
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ -f /tmp/opencode/analysis_result.txt ] && [ -s /tmp/opencode/analysis_result.txt ]; then
+            DEV_TYPE=$(head -1 /tmp/opencode/analysis_result.txt)
+            
+            case "$DEV_TYPE" in
+              api-only|frontend-only|both)
+                echo "dev_type=$DEV_TYPE" >> $GITHUB_OUTPUT
+                ;;
+              *)
+                echo "dev_type=both" >> $GITHUB_OUTPUT
+                DEV_TYPE="both"
+                ;;
+            esac
+            
+            ANALYSIS_REASON=$(tail -n +2 /tmp/opencode/analysis_result.txt)
+            echo "analysis_reason<<EOF" >> $GITHUB_OUTPUT
+            echo "$ANALYSIS_REASON" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "dev_type=both" >> $GITHUB_OUTPUT
+            echo "analysis_reason=AI 分析失败，默认触发两个仓库" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add label to issue
+        if: steps.check-label.outputs.has_accept == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+        run: |
+          gh issue edit $ISSUE_NUMBER -R ${{ github.repository }} --add-label "$DEV_TYPE"
+
+      - name: Trigger APIMagic repository
+        if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'api-only' || steps.parse-result.outputs.dev_type == 'both')
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          APIMAGIC_REPO: ${{ secrets.APIMAGIC_REPO }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          CHANGELOG_REPO: ${{ github.repository }}
+        run: |
+          PAYLOAD=$(cat << EOF
+          {
+            "issue_number": "$ISSUE_NUMBER",
+            "issue_title": "$ISSUE_TITLE",
+            "issue_body": "$ISSUE_BODY",
+            "source_repo": "$CHANGELOG_REPO"
+          }
+          EOF
+          )
+          
+          gh api repos/$APIMAGIC_REPO/dispatches \
+            -f event_type='start-api-dev' \
+            -F client_payload="$PAYLOAD"
+
+      - name: Trigger datastat-website repository
+        if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'frontend-only' || steps.parse-result.outputs.dev_type == 'both')
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          DATASTAT_WEBSITE_REPO: ${{ secrets.DATASTAT_WEBSITE_REPO }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          CHANGELOG_REPO: ${{ github.repository }}
+          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+        run: |
+          PAYLOAD=$(cat << EOF
+          {
+            "issue_number": "$ISSUE_NUMBER",
+            "issue_title": "$ISSUE_TITLE",
+            "issue_body": "$ISSUE_BODY",
+            "source_repo": "$CHANGELOG_REPO",
+            "needs_api": "$([ "$DEV_TYPE" = "both" ] && echo "true" || echo "false")"
+          }
+          EOF
+          )
+          
+          gh api repos/$DATASTAT_WEBSITE_REPO/dispatches \
+            -f event_type='start-frontend-dev' \
+            -F client_payload="$PAYLOAD"
+
+      - name: Post analysis result to issue
+        if: steps.check-label.outputs.has_accept == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+          ANALYSIS_REASON: ${{ steps.parse-result.outputs.analysis_reason }}
+          EXIT_CODE: ${{ steps.analyze.outputs.exit_code }}
+        run: |
+          if [ "$EXIT_CODE" != "0" ]; then
+            COMMENT="⚠️ **AI 分析出错** (Exit code: $EXIT_CODE)
+
+          默认触发所有仓库开发。"
+          else
+            COMMENT="✅ **需求分析完成**
+
+          **开发类型**: $DEV_TYPE
+
+          **判断理由**:
+          $ANALYSIS_REASON
+
+          已触发目标仓库开始开发。"
+          fi
+          
+          gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$COMMENT"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/opencode || true
