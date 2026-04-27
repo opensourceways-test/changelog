@@ -43,26 +43,14 @@ jobs:
           issue-number: ${{ github.event.issue.number }}
           github-token: ${{ github.token }}
 
-      - name: Download requirements artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: issue-${{ github.event.issue.number }}-requirements
-          path: /tmp/opencode
-        continue-on-error: true
-
-      - name: Download design artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: issue-${{ github.event.issue.number }}-design
-          path: /tmp/opencode
-        continue-on-error: true
-
-      - name: Download dev_type artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: issue-${{ github.event.issue.number }}-dev-type
-          path: /tmp/opencode
-        continue-on-error: true
+      - name: Copy design documents
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p /tmp/opencode
+          cp docs/issues/$ISSUE_NUMBER/requirements.md /tmp/opencode/ 2>/dev/null || true
+          cp docs/issues/$ISSUE_NUMBER/design.md /tmp/opencode/ 2>/dev/null || true
+          cp docs/issues/$ISSUE_NUMBER/dev_type.txt /tmp/opencode/ 2>/dev/null || true
 
       - name: Determine dev type
         id: dev-type
