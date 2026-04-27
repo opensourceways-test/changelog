@@ -11,6 +11,7 @@ concurrency:
 permissions:
   issues: write
   contents: read
+  pull-requests: write
 
 jobs:
   develop:
@@ -132,13 +133,17 @@ jobs:
           DEV_TYPE: ${{ steps.extract.outputs.dev-type }}
           API_HAS: ${{ steps.api.outputs.has_changes }}
           FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
-          RESULT=""
           NL=$'\n'
+          RESULT=""
+          
+          PR_BODY_TEMPLATE="## 描述${NL}来自 changelog issue #${ISSUE_NUMBER}${NL}${NL}## 相关 Issue${NL}resolve https://github.com/${REPO_OWNER}/changelog/issues/${ISSUE_NUMBER}${NL}${NL}## 变更类型${NL}- [ ] Bug 修复${NL}- [ ] 新功能${NL}- [ ] 代码重构${NL}- [ ] 文档更新${NL}- [ ] 样式改进${NL}- [ ] 性能优化${NL}- [ ] 测试相关${NL}- [ ] 其他"
+          
           if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
             if [ "$API_HAS" = "true" ]; then
               cd APIMagic
-              PR=$(gh pr create --title "API for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
+              PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
               cd ..
               RESULT="${RESULT}APIMagic PR: $PR${NL}"
             else
@@ -148,7 +153,7 @@ jobs:
           if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
             if [ "$FRONTEND_HAS" = "true" ]; then
               cd datastat-website
-              PR=$(gh pr create --title "Frontend for issue #$ISSUE_NUMBER" --body "来自 changelog issue #$ISSUE_NUMBER" --base main)
+              PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
               cd ..
               RESULT="${RESULT}datastat-website PR: $PR${NL}"
             else
