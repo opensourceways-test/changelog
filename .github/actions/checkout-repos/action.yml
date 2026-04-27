@@ -1,0 +1,38 @@
+name: 'Checkout Target Repositories'
+description: 'Checkout APIMagic and/or datastat-website based on dev_type'
+inputs:
+  dev-type:
+    description: 'Development type: api-only, frontend-only, or both'
+    required: true
+  mode:
+    description: 'Checkout mode: analysis (sparse) or full'
+    required: false
+    default: 'full'
+  cross-repo-token:
+    description: 'Token for cross-repository access'
+    required: true
+  repository-owner:
+    description: 'Repository owner/organization'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Checkout APIMagic
+      if: inputs.dev-type == 'api-only' || inputs.dev-type == 'both'
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository-owner }}/APIMagic
+        token: ${{ inputs.cross-repo-token }}
+        path: APIMagic
+        sparse-checkout: ${{ inputs.mode == 'analysis' && 'magic-api/api' || '' }}
+        fetch-depth: ${{ inputs.mode == 'analysis' && 1 || 0 }}
+    
+    - name: Checkout datastat-website
+      if: inputs.dev-type == 'frontend-only' || inputs.dev-type == 'both'
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository-owner }}/datastat-website
+        token: ${{ inputs.cross-repo-token }}
+        path: datastat-website
+        sparse-checkout: ${{ inputs.mode == 'analysis' && 'src/views,src/components' || '' }}
+        fetch-depth: ${{ inputs.mode == 'analysis' && 1 || 0 }}
