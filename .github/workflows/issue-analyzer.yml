@@ -50,22 +50,20 @@ jobs:
           $ISSUE_BODY
           EOF
 
-      - name: Run opencode to analyze issue
-        id: analyze
+      - name: Determine development type
+        id: determine-type
         run: |
-          MESSAGE="请根据以下 GitHub Issue 进行需求和设计分析：
+          MESSAGE="请根据以下 GitHub Issue 判断需要开发哪些仓库：
 
           Issue 内容：
           $(cat /tmp/opencode/issue_context.txt)
 
-          请执行以下操作：
-          1. 将需求分析报告写入 /tmp/opencode/requirements.md，包含：Issue 概述、需求详情、影响范围
-          2. 将设计方案文档写入 /tmp/opencode/design.md，包含：技术方案、实现步骤、验收标准
-          3. 判断需要开发哪些仓库，将结果写入 /tmp/opencode/dev_type.txt（只写一行：api-only/frontend-only/both）
+          请判断该需求需要：
+          1. api-only - 只需要 APIMagic 开发 API
+          2. frontend-only - 只需要 datastat-website 开发前端
+          3. both - 同时需要 API 和前端开发
 
-          文件格式要求：
-          - 使用标准 Markdown 格式
-          - 每个文件以一级标题开始"
+          将判断结果写入 /tmp/opencode/dev_type.txt（只写一行，格式：api-only/frontend-only/both）"
 
           set +e
           opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false
@@ -73,7 +71,7 @@ jobs:
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
-      - name: Parse analysis result
+      - name: Parse dev type
         id: parse-result
         run: |
           if [ -f /tmp/opencode/dev_type.txt ] && [ -s /tmp/opencode/dev_type.txt ]; then
@@ -90,6 +88,91 @@ jobs:
           else
             echo "dev_type=both" >> $GITHUB_OUTPUT
           fi
+
+      - name: Checkout APIMagic for design analysis
+        if: steps.parse-result.outputs.dev_type == 'api-only' || steps.parse-result.outputs.dev_type == 'both'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/APIMagic
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: apimagic-repo
+          sparse-checkout: |
+            magic-api/api
+            CLAUDE.md
+            src/main
+
+      - name: Checkout datastat-website for design analysis
+        if: steps.parse-result.outputs.dev_type == 'frontend-only' || steps.parse-result.outputs.dev_type == 'both'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/datastat-website
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: datastat-website-repo
+          sparse-checkout: |
+            src
+            CLAUDE.md
+
+      - name: Generate requirements and design documents
+        id: analyze
+        env:
+          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+        run: |
+          REPO_CONTEXT=""
+          
+          if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            if [ -d "apimagic-repo" ]; then
+              REPO_CONTEXT+="\n\n### APIMagic 仓库结构\n"
+              REPO_CONTEXT+="目录结构：\n"
+              REPO_CONTEXT+=$(ls -la apimagic-repo/ 2>/dev/null || echo "无法访问")
+              REPO_CONTEXT+="\n\n现有 API 文件：\n"
+              REPO_CONTEXT+=$(find apimagic-repo/magic-api/api -name "*.ms" 2>/dev/null | head -20 || echo "无 .ms 文件")
+            fi
+          fi
+          
+          if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            if [ -d "datastat-website-repo" ]; then
+              REPO_CONTEXT+="\n\n### datastat-website 仓库结构\n"
+              REPO_CONTEXT+="目录结构：\n"
+              REPO_CONTEXT+=$(ls -la datastat-website-repo/src/ 2>/dev/null || echo "无法访问")
+              REPO_CONTEXT+="\n\n组件目录：\n"
+              REPO_CONTEXT+=$(ls datastat-website-repo/src/components/ 2>/dev/null | head -20 || echo "无组件")
+              REPO_CONTEXT+="\n\n页面目录：\n"
+              REPO_CONTEXT+=$(ls datastat-website-repo/src/views/ 2>/dev/null | head -20 || echo "无页面")
+            fi
+          fi
+          
+          MESSAGE="请根据以下 GitHub Issue 和目标仓库代码结构进行详细需求分析和设计：
+
+          Issue 内容：
+          $(cat /tmp/opencode/issue_context.txt)
+
+          目标仓库信息：
+          $REPO_CONTEXT
+
+          开发类型：$DEV_TYPE
+
+          请执行以下操作：
+          1. 将需求分析报告写入 /tmp/opencode/requirements.md，包含：
+             - Issue 概述
+             - 需求详情（具体要实现什么功能）
+             - 涉及的具体文件路径（根据仓库结构判断）
+             - 影响范围
+          2. 将设计方案文档写入 /tmp/opencode/design.md，包含：
+             - 技术方案（基于目标仓库的技术栈）
+             - 具体实现步骤（列出要修改/创建的文件）
+             - 代码示例（如需新增 API 接口，写出 .ms 文件格式；如需修改前端，写出 Vue 组件修改方案）
+             - 验收标准
+
+          文件格式要求：
+          - 使用标准 Markdown 格式
+          - 每个文件以一级标题开始
+          - 设计方案要具体，能直接指导开发"
+
+          set +e
+          opencode run "$MESSAGE" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Add dev_type label to issue
         env:
