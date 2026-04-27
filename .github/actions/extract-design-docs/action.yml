@@ -74,6 +74,9 @@ runs:
             f.write(dev_type)
         
         has_docs = 'true' if (req_comments and design_comments) else 'false'
-        print(f"has_docs={has_docs}")
-        print(f"dev_type={dev_type}")
+        with open('/tmp/opencode/outputs.txt', 'w') as f:
+            f.write(f"has_docs={has_docs}\n")
+            f.write(f"dev_type={dev_type}\n")
         PYTHON_SCRIPT
+        
+        cat /tmp/opencode/outputs.txt >> $GITHUB_OUTPUT
