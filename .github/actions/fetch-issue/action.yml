@@ -1,0 +1,34 @@
+name: 'Fetch Issue Content'
+description: 'Fetch issue title and body using GitHub CLI'
+inputs:
+  issue-number:
+    description: 'Issue number to fetch'
+    required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+outputs:
+  title:
+    description: 'Issue title'
+    value: ${{ steps.fetch.outputs.title }}
+  body:
+    description: 'Issue body'
+    value: ${{ steps.fetch.outputs.body }}
+runs:
+  using: composite
+  steps:
+    - name: Fetch issue content
+      id: fetch
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        TITLE=$(gh issue view ${{ inputs.issue-number }} --json title -q '.title')
+        BODY=$(gh issue view ${{ inputs.issue-number }} --json body -q '.body')
+        printf "Issue #%s: %s\n\n%s" "${{ inputs.issue-number }}" "$TITLE" "$BODY" > /tmp/opencode/issue.txt
+        echo "title<<EOF" >> $GITHUB_OUTPUT
+        echo "$TITLE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "body<<EOF" >> $GITHUB_OUTPUT
+        echo "$BODY" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+      shell: bash
