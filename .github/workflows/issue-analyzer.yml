@@ -45,8 +45,8 @@ jobs:
         run: |
           opencode run "判断以下 Issue 需要开发哪些仓库（只写一行：api-only/frontend-only/both）：
 
-          $(cat /tmp/opencode/issue.txt)" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
-          cat /tmp/opencode/dev_type.txt 2>/dev/null || echo "both" > /tmp/opencode/dev_type.txt
+          $(cat /tmp/opencode/issue.txt)" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false > /tmp/opencode/dev_type.txt || true
+          [ -s /tmp/opencode/dev_type.txt ] || echo "both" > /tmp/opencode/dev_type.txt
 
       - name: Parse dev type
         id: parse
@@ -71,8 +71,12 @@ jobs:
           DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
         run: |
           REPO_INFO=""
-          [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ] && REPO_INFO+="APIMagic API目录: $(ls APIMagic/magic-api/api/ 2>/dev/null)\n"
-          [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ] && REPO_INFO+="datastat-website views: $(ls datastat-website/src/views/ 2>/dev/null)\n"
+          if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            REPO_INFO+="APIMagic API目录: $(ls APIMagic/magic-api/api/ 2>/dev/null || true)\n"
+          fi
+          if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
+            REPO_INFO+="datastat-website views: $(ls datastat-website/src/views/ 2>/dev/null || true)\n"
+          fi
           
           opencode run "根据 Issue 和目标仓库结构生成设计文档：
 
