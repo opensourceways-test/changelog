@@ -183,16 +183,47 @@ runs:
 
 ## Artifacts
 
+### Naming Convention
+Artifacts use issue number in the name: `issue-{number}-{type}`
+
+Example for issue #42:
+- `issue-42-requirements`
+- `issue-42-design`
+- `issue-42-dev-type`
+
 ### Analyzer uploads:
-- `requirements.md` - 需求分析文档
-- `design.md` - 技术设计方案
-- `dev_type.txt` - 开发类型
+```yaml
+- uses: actions/upload-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-requirements
+    path: /tmp/opencode/requirements.md
+- uses: actions/upload-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-design
+    path: /tmp/opencode/design.md
+- uses: actions/upload-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-dev-type
+    path: /tmp/opencode/dev_type.txt
+```
 
 ### Developer downloads:
-- Same artifacts from analyzer run
-- Match by issue number via workflow_run or manual storage
+```yaml
+- uses: actions/download-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-requirements
+    path: /tmp/opencode
+- uses: actions/download-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-design
+    path: /tmp/opencode
+- uses: actions/download-artifact@v4
+  with:
+    name: issue-${{ github.event.issue.number }}-dev-type
+    path: /tmp/opencode
+```
 
-Note: Since workflows are triggered independently by labels, artifacts will be stored with issue number in the name for easy retrieval.
+Note: Artifacts are retained for 30 days by default, sufficient for the workflow timeline.
 
 ## Migration Path
 
