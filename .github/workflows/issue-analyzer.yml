@@ -14,37 +14,18 @@ permissions:
 
 jobs:
   analyze-issue:
+    if: github.event.label.name == 'accept' && github.event.issue.state == 'open'
     runs-on: self-hosted
     container:
       image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
       env:
         HOME: /home/runner
     timeout-minutes: 30
+    outputs:
+      dev_type: ${{ steps.parse-result.outputs.dev_type }}
     
     steps:
-      - name: Check if label is accept
-        id: check-label
-        env:
-          ADDED_LABEL: ${{ github.event.label.name }}
-          ISSUE_STATE: ${{ github.event.issue.state }}
-        run: |
-          if [ "$ISSUE_STATE" != "open" ]; then
-            echo "Skipping: issue state is '$ISSUE_STATE', not 'open'"
-            exit 0
-          fi
-          
-          if [ "$ADDED_LABEL" != "accept" ]; then
-            echo "Skipping: added label is '$ADDED_LABEL', not 'accept'"
-            exit 0
-          fi
-          echo "has_accept=true" >> $GITHUB_OUTPUT
-
-      - name: Exit if not accept
-        if: steps.check-label.outputs.has_accept != 'true'
-        run: exit 0
-
       - name: Setup opencode credentials
-        if: steps.check-label.outputs.has_accept == 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
@@ -54,7 +35,6 @@ jobs:
           printf '{"$schema":"https://opencode.ai/config.json","provider":{},"agent":{},"mode":{},"command":{},"username":"runner"}\n' > $HOME/.config/opencode/opencode.json
 
       - name: Prepare issue data
-        if: steps.check-label.outputs.has_accept == 'true'
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ github.token }}
@@ -71,7 +51,6 @@ jobs:
           EOF
 
       - name: Run opencode to analyze issue
-        if: steps.check-label.outputs.has_accept == 'true'
         id: analyze
         run: |
           MESSAGE="请根据以下 GitHub Issue 进行需求和设计分析：
@@ -95,7 +74,6 @@ jobs:
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Parse analysis result
-        if: steps.check-label.outputs.has_accept == 'true'
         id: parse-result
         run: |
           if [ -f /tmp/opencode/dev_type.txt ] && [ -s /tmp/opencode/dev_type.txt ]; then
@@ -113,8 +91,7 @@ jobs:
             echo "dev_type=both" >> $GITHUB_OUTPUT
           fi
 
-      - name: Add label to issue
-        if: steps.check-label.outputs.has_accept == 'true'
+      - name: Add dev_type label to issue
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -122,8 +99,65 @@ jobs:
         run: |
           gh issue edit $ISSUE_NUMBER -R ${{ github.repository }} --add-label "$DEV_TYPE"
 
+      - name: Post analysis result to issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+          EXIT_CODE: ${{ steps.analyze.outputs.exit_code }}
+        run: |
+          if [ "$EXIT_CODE" != "0" ]; then
+            COMMENT="⚠️ **AI 分析出错** (Exit code: $EXIT_CODE)
+
+          请检查并重新触发。"
+            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$COMMENT"
+          else
+            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "✅ **需求分析完成**
+
+          **开发类型**: $DEV_TYPE
+
+          请审核设计文档后添加 \`approved\` 标签触发开发。"
+            
+            if [ -f /tmp/opencode/requirements.md ] && [ -s /tmp/opencode/requirements.md ]; then
+              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/requirements.md)"
+            fi
+            
+            if [ -f /tmp/opencode/design.md ] && [ -s /tmp/opencode/design.md ]; then
+              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/design.md)"
+            fi
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/opencode || true
+
+  trigger-development:
+    if: github.event.label.name == 'approved' && github.event.issue.state == 'open'
+    runs-on: self-hosted
+    needs: []
+    
+    steps:
+      - name: Get issue labels
+        id: get-labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          LABELS=$(gh issue view $ISSUE_NUMBER -R ${{ github.repository }} --json labels -q '.labels[].name')
+          
+          if echo "$LABELS" | grep -q "^api-only$"; then
+            echo "dev_type=api-only" >> $GITHUB_OUTPUT
+          elif echo "$LABELS" | grep -q "^frontend-only$"; then
+            echo "dev_type=frontend-only" >> $GITHUB_OUTPUT
+          elif echo "$LABELS" | grep -q "^both$"; then
+            echo "dev_type=both" >> $GITHUB_OUTPUT
+          else
+            echo "dev_type=both" >> $GITHUB_OUTPUT
+          fi
+
       - name: Trigger APIMagic repository
-        if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'api-only' || steps.parse-result.outputs.dev_type == 'both')
+        if: steps.get-labels.outputs.dev_type == 'api-only' || steps.get-labels.outputs.dev_type == 'both'
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           APIMAGIC_REPO: ${{ github.repository_owner }}/APIMagic
@@ -140,7 +174,7 @@ jobs:
             -f 'client_payload[source_repo]'="$CHANGELOG_REPO"
 
       - name: Trigger datastat-website repository
-        if: steps.check-label.outputs.has_accept == 'true' && (steps.parse-result.outputs.dev_type == 'frontend-only' || steps.parse-result.outputs.dev_type == 'both')
+        if: steps.get-labels.outputs.dev_type == 'frontend-only' || steps.get-labels.outputs.dev_type == 'both'
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           DATASTAT_WEBSITE_REPO: ${{ github.repository_owner }}/datastat-website
@@ -148,7 +182,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           CHANGELOG_REPO: ${{ github.repository }}
-          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
+          DEV_TYPE: ${{ steps.get-labels.outputs.dev_type }}
         run: |
           NEEDS_API=$([ "$DEV_TYPE" = "both" ] && echo "true" || echo "false")
           gh api repos/$DATASTAT_WEBSITE_REPO/dispatches \
@@ -159,36 +193,14 @@ jobs:
             -f 'client_payload[source_repo]'="$CHANGELOG_REPO" \
             -F 'client_payload[needs_api]'="$NEEDS_API"
 
-      - name: Post analysis result to issue
-        if: steps.check-label.outputs.has_accept == 'true'
+      - name: Comment on issue
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          DEV_TYPE: ${{ steps.parse-result.outputs.dev_type }}
-          EXIT_CODE: ${{ steps.analyze.outputs.exit_code }}
+          DEV_TYPE: ${{ steps.get-labels.outputs.dev_type }}
         run: |
-          if [ "$EXIT_CODE" != "0" ]; then
-            COMMENT="⚠️ **AI 分析出错** (Exit code: $EXIT_CODE)
-
-          默认触发所有仓库开发。"
-            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$COMMENT"
-          else
-            gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "✅ **需求分析完成**
+          gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "🚀 **已触发开发**
 
           **开发类型**: $DEV_TYPE
 
-          已触发目标仓库开始开发。"
-            
-            if [ -f /tmp/opencode/requirements.md ] && [ -s /tmp/opencode/requirements.md ]; then
-              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/requirements.md)"
-            fi
-            
-            if [ -f /tmp/opencode/design.md ] && [ -s /tmp/opencode/design.md ]; then
-              gh issue comment $ISSUE_NUMBER -R ${{ github.repository }} --body "$(cat /tmp/opencode/design.md)"
-            fi
-          fi
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -rf /tmp/opencode || true
+          目标仓库已开始自动开发。"
