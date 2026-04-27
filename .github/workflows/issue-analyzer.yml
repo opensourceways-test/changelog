@@ -58,7 +58,7 @@ jobs:
         uses: ./.github/actions/checkout-repos
         with:
           dev-type: ${{ steps.parse.outputs.dev_type }}
-          mode: analysis
+          mode: full
           cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
@@ -67,25 +67,26 @@ jobs:
         shell: bash
         env:
           DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          TARGET_DIRS=""
+          REPO_PATH=""
           if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
-            TARGET_DIRS+="APIMagic/magic-api/api "
+            REPO_PATH+="APIMagic "
           fi
           if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
-            TARGET_DIRS+="datastat-website/src/views datastat-website/src/components"
+            REPO_PATH+="datastat-website "
           fi
           
-          opencode run "根据 Issue 生成设计文档，只关注以下目录：
-          $TARGET_DIRS
+          opencode run "根据 Issue 和 CLAUDE.md 生成设计文档：
 
           Issue: $(cat /tmp/opencode/issue.txt)
 
+          目标仓库: $REPO_PATH
+
           要求：
-          1. 不要执行 git ls-tree 或全局 Glob 搜索
-          2. 只读取指定目录下的文件
-          3. 写入 /tmp/opencode/requirements.md（需求分析）
-          4. 写入 /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          1. 先读取各仓库的 CLAUDE.md 了解项目结构
+          2. 写入 /tmp/opencode/requirements.md（需求分析）
+          3. 写入 /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
 
       - name: Add dev_type label
         env:
