@@ -24,6 +24,7 @@ runs:
       run: |
         TITLE=$(gh issue view ${{ inputs.issue-number }} --json title -q '.title')
         BODY=$(gh issue view ${{ inputs.issue-number }} --json body -q '.body')
+        mkdir -p /tmp/opencode
         printf "Issue #%s: %s\n\n%s" "${{ inputs.issue-number }}" "$TITLE" "$BODY" > /tmp/opencode/issue.txt
         echo "title<<EOF" >> $GITHUB_OUTPUT
         echo "$TITLE" >> $GITHUB_OUTPUT
