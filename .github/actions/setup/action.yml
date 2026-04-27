@@ -11,5 +11,6 @@ runs:
       run: |
         mkdir -p $HOME/.local/share/opencode/log $HOME/.config/opencode /tmp/opencode
         printf '{"alibaba-cn":{"type":"api","key":"%s"}}\n' "${{ inputs.opencode-api-key }}" > $HOME/.local/share/opencode/auth.json
+        chmod 600 $HOME/.local/share/opencode/auth.json
         printf '{"$schema":"https://opencode.ai/config.json"}\n' > $HOME/.config/opencode/opencode.json
       shell: bash
