@@ -1,0 +1,123 @@
+name: Issue Analyzer
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: issue-analyzer-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  analyze:
+    if: github.event.label.name == 'accept' && github.event.issue.state == 'open'
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
+      env:
+        HOME: /home/runner
+    timeout-minutes: 10
+    outputs:
+      dev_type: ${{ steps.parse.outputs.dev_type }}
+    
+    steps:
+      - name: Checkout changelog
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+
+      - name: Fetch issue
+        uses: ./.github/actions/fetch-issue
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          github-token: ${{ github.token }}
+
+      - name: Determine dev type
+        id: dev-type
+        run: |
+          opencode run "判断以下 Issue 需要开发哪些仓库（只写一行：api-only/frontend-only/both）：
+
+          $(cat /tmp/opencode/issue.txt)" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          cat /tmp/opencode/dev_type.txt 2>/dev/null || echo "both" > /tmp/opencode/dev_type.txt
+
+      - name: Parse dev type
+        id: parse
+        run: |
+          DEV_TYPE=$(head -1 /tmp/opencode/dev_type.txt 2>/dev/null || echo "both")
+          case "$DEV_TYPE" in api-only|frontend-only|both) ;; *) DEV_TYPE="both";; esac
+          echo "dev_type=$DEV_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Checkout target repos for analysis
+        uses: ./.github/actions/checkout-repos
+        with:
+          dev-type: ${{ steps.parse.outputs.dev_type }}
+          mode: analysis
+          cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
+          repository-owner: ${{ github.repository_owner }}
+
+      - name: Generate design documents
+        id: design
+        env:
+          DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
+        run: |
+          REPO_INFO=""
+          [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ] && REPO_INFO+="APIMagic API目录: $(ls APIMagic/magic-api/api/ 2>/dev/null)\n"
+          [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ] && REPO_INFO+="datastat-website views: $(ls datastat-website/src/views/ 2>/dev/null)\n"
+          
+          opencode run "根据 Issue 和目标仓库结构生成设计文档：
+
+          Issue: $(cat /tmp/opencode/issue.txt)
+
+          仓库结构: $REPO_INFO
+
+          写入：
+          1. /tmp/opencode/requirements.md（需求分析）
+          2. /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-requirements
+          path: /tmp/opencode/requirements.md
+          retention-days: 30
+
+      - name: Upload design artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-design
+          path: /tmp/opencode/design.md
+          retention-days: 30
+
+      - name: Upload dev_type artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-${{ github.event.issue.number }}-dev-type
+          path: /tmp/opencode/dev_type.txt
+          retention-days: 30
+
+      - name: Add dev_type label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
+        run: gh issue edit $ISSUE_NUMBER --add-label "$DEV_TYPE"
+
+      - name: Comment design documents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEV_TYPE: ${{ steps.parse.outputs.dev_type }}
+        run: |
+          gh issue comment $ISSUE_NUMBER --body "✅ **需求分析完成** (开发类型: $DEV_TYPE)
+          
+          请审核后添加 \`approved\` 标签触发开发。"
+          
+          [ -f /tmp/opencode/requirements.md ] && gh issue comment $ISSUE_NUMBER --body "$(cat /tmp/opencode/requirements.md)"
+          [ -f /tmp/opencode/design.md ] && gh issue comment $ISSUE_NUMBER --body "$(cat /tmp/opencode/design.md)"
