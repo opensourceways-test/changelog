@@ -60,20 +60,46 @@ jobs:
           issue-number: ${{ github.event.issue.number }}
           github-token: ${{ github.token }}
 
+      - name: Parse develop command
+        id: parse-cmd
+        if: github.event_name == 'issue_comment'
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DEV_TYPE_LABEL: ${{ steps.extract.outputs.dev-type }}
+        run: |
+          if echo "$COMMENT_BODY" | grep -qi '/develop api'; then
+            echo "dev_type=api-only" >> $GITHUB_OUTPUT
+          elif echo "$COMMENT_BODY" | grep -qi '/develop frontend'; then
+            echo "dev_type=frontend-only" >> $GITHUB_OUTPUT
+          elif echo "$COMMENT_BODY" | grep -qi '/develop both'; then
+            echo "dev_type=both" >> $GITHUB_OUTPUT
+          else
+            echo "dev_type=$DEV_TYPE_LABEL" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine final dev type
+        id: final-type
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "dev_type=${{ steps.parse-cmd.outputs.dev_type }}" >> $GITHUB_OUTPUT
+          else
+            echo "dev_type=${{ steps.extract.outputs.dev-type }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout target repos
         uses: ./.github/actions/checkout-repos
         with:
-          dev-type: ${{ steps.extract.outputs.dev-type }}
+          dev-type: ${{ steps.final-type.outputs.dev_type }}
           cross-repo-token: ${{ secrets.CROSS_REPO_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
       - name: Develop API
-        if: steps.extract.outputs.dev-type == 'api-only' || steps.extract.outputs.dev-type == 'both'
+        if: steps.final-type.outputs.dev_type == 'api-only' || steps.final-type.outputs.dev_type == 'both'
         id: api
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           DB_HOST: 10.0.0.58
-run: |
+        run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd APIMagic
           git checkout -- . 2>/dev/null || true
@@ -117,7 +143,7 @@ run: |
         shell: bash
 
       - name: Develop Frontend
-        if: steps.extract.outputs.dev-type == 'frontend-only' || steps.extract.outputs.dev-type == 'both'
+        if: steps.final-type.outputs.dev_type == 'frontend-only' || steps.final-type.outputs.dev_type == 'both'
         id: frontend
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
