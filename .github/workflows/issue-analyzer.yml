@@ -80,15 +80,18 @@ jobs:
             REPO_PATH+="datastat-website "
           fi
           
+          ISSUE_CONTENT=$(cat /tmp/opencode/issue.txt 2>/dev/null || echo "无法读取 issue.txt")
+          
           opencode run "根据 Issue 和 CLAUDE.md 生成/更新设计文档：
 
-          Issue: $(cat /tmp/opencode/issue.txt)
+          Issue 内容：
+          $ISSUE_CONTENT
 
           目标仓库: $REPO_PATH
 
           要求：
           1. 先读取各仓库的 CLAUDE.md 了解项目结构
-          2. 注意：issue.txt 中包含用户评论，如有对之前设计文档的修改意见（如表名修改），必须采纳
+          2. 注意：Issue 内容中包含用户评论，如有对之前设计文档的修改意见（如表名修改），必须采纳
           3. 写入 /tmp/opencode/requirements.md（需求分析）
           4. 写入 /tmp/opencode/design.md（设计方案，含具体文件路径和代码示例）" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
 
