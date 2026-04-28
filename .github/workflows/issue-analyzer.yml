@@ -3,6 +3,8 @@ name: Issue Analyzer
 on:
   issues:
     types: [labeled]
+  issue_comment:
+    types: [created]
 
 concurrency:
   group: issue-analyzer-${{ github.event.issue.number }}
@@ -14,7 +16,9 @@ permissions:
 
 jobs:
   analyze:
-    if: github.event.label.name == 'accept' && github.event.issue.state == 'open'
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'accept' && github.event.issue.state == 'open') ||
+      (github.event_name == 'issue_comment' && github.event.issue.state == 'open' && contains(github.event.comment.body, '/reanalyze'))
     runs-on: self-hosted
     container:
       image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
