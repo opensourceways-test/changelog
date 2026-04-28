@@ -67,6 +67,11 @@ jobs:
         id: api
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd APIMagic
