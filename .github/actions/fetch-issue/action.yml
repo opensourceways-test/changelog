@@ -22,16 +22,36 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        TITLE=$(gh issue view ${{ inputs.issue-number }} --json title -q '.title')
-        BODY=$(gh issue view ${{ inputs.issue-number }} --json body -q '.body')
-        COMMENTS=$(gh issue view ${{ inputs.issue-number }} --json comments -q '.[].body' || true)
         mkdir -p /tmp/opencode
-        {
-          printf "Issue #%s: %s\n\n%s" "${{ inputs.issue-number }}" "$TITLE" "$BODY"
-          if [ -n "$COMMENTS" ]; then
-            printf "\n\n--- 用户评论 ---\n%s" "$COMMENTS"
-          fi
-        } > /tmp/opencode/issue.txt
+        
+        gh issue view ${{ inputs.issue-number }} --json title,body,comments > /tmp/opencode/issue_data.json
+        
+        python3 << 'PYTHON_SCRIPT'
+        import json
+        
+        with open('/tmp/opencode/issue_data.json') as f:
+            data = json.load(f)
+        
+        title = data.get('title', '')
+        body = data.get('body', '')
+        comments = data.get('comments', [])
+        
+        with open('/tmp/opencode/issue.txt', 'w') as f:
+            f.write(f"Issue #${{ inputs.issue-number }}: {title}\n\n{body}")
+            if comments:
+                f.write("\n\n--- 用户评论 ---\n")
+                for c in comments:
+                    f.write(f"{c.get('body', '')}\n")
+        
+        with open('/tmp/opencode/title.txt', 'w') as f:
+            f.write(title)
+        
+        with open('/tmp/opencode/body.txt', 'w') as f:
+            f.write(body)
+        PYTHON_SCRIPT
+        
+        TITLE=$(cat /tmp/opencode/title.txt)
+        BODY=$(cat /tmp/opencode/body.txt)
         echo "title<<EOF" >> $GITHUB_OUTPUT
         echo "$TITLE" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
