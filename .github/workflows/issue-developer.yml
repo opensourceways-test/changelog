@@ -71,7 +71,13 @@ jobs:
         run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd APIMagic
-          git checkout -b $BRANCH 2>/dev/null || { git checkout $BRANCH && git pull origin $BRANCH 2>/dev/null || true; }
+          git fetch origin $BRANCH 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/$BRANCH; then
+            git checkout $BRANCH
+            git pull origin $BRANCH --rebase || git pull origin $BRANCH
+          else
+            git checkout -b $BRANCH
+          fi
           git config --global --add safe.directory $GITHUB_WORKSPACE/APIMagic
           
           DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
@@ -111,7 +117,13 @@ jobs:
         run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd datastat-website
-          git checkout -b $BRANCH 2>/dev/null || { git checkout $BRANCH && git pull origin $BRANCH 2>/dev/null || true; }
+          git fetch origin $BRANCH 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/$BRANCH; then
+            git checkout $BRANCH
+            git pull origin $BRANCH --rebase || git pull origin $BRANCH
+          else
+            git checkout -b $BRANCH
+          fi
           git config --global --add safe.directory $GITHUB_WORKSPACE/datastat-website
           
           DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
