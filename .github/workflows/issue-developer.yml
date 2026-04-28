@@ -191,15 +191,19 @@ jobs:
               EXISTING_PR=$(gh pr list --head $BRANCH --state open --json number,url -q '.[0].url' 2>/dev/null || echo "")
               if [ -n "$EXISTING_PR" ]; then
                 PR="$EXISTING_PR"
+                PR_NUM=$(gh pr list --head $BRANCH --state open --json number -q '.[0].number')
                 echo "PR already exists: $PR"
               else
                 PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+                PR_NUM=$(echo "$PR" | grep -oP 'pull/\K[0-9]+')
               fi
+              DATASTAT_PORT=$((20000 + PR_NUM))
               cd ..
               RESULT="${RESULT}datastat-website PR: $PR${NL}"
+              RESULT="${RESULT}datastat-website 测试: http://159.138.55.6:$DATASTAT_PORT${NL}"
             else
               RESULT="${RESULT}datastat-website: 无变更${NL}"
             fi
           fi
-          gh issue comment $ISSUE_NUMBER --body "🚀 **开发完成**${NL}${NL}${RESULT}"
+          gh issue comment $ISSUE_NUMBER --body "🚀 **开发完成**${NL}${NL}${RESULT}${NL}**APIMagic 测试服务**：${NL}- API: http://159.138.55.6:9999${NL}- MagicAPI UI: http://159.138.55.6:9999/magic/web/index.html${NL}${NL}> PR 创建后会自动触发测试服务启动"
         shell: bash
