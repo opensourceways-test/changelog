@@ -152,11 +152,13 @@ jobs:
           cd datastat-website
           git checkout -- . 2>/dev/null || true
           git clean -fd 2>/dev/null || true
+          git fetch origin beta 2>/dev/null || true
           git fetch origin $BRANCH 2>/dev/null || true
           if git show-ref --verify --quiet refs/remotes/origin/$BRANCH; then
             git checkout -f $BRANCH
             git pull origin $BRANCH --rebase || git pull origin $BRANCH
           else
+            git checkout -f beta
             git checkout -f -b $BRANCH
           fi
           git config --global --add safe.directory $GITHUB_WORKSPACE/datastat-website
@@ -229,7 +231,7 @@ jobs:
                 PR_NUM=$(gh pr list --head $BRANCH --state open --json number -q '.[0].number')
                 echo "PR already exists: $PR"
               else
-                PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+                PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base beta)
                 PR_NUM=$(echo "$PR" | grep -oP 'pull/\K[0-9]+')
               fi
               DATASTAT_PORT=$((20000 + PR_NUM))

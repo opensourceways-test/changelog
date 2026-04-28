@@ -30,3 +30,4 @@ runs:
         token: ${{ inputs.cross-repo-token }}
         path: datastat-website
         fetch-depth: 0
+        ref: beta
