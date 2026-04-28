@@ -162,6 +162,7 @@ jobs:
           API_HAS: ${{ steps.api.outputs.has_changes }}
           FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
           REPO_OWNER: ${{ github.repository_owner }}
+          BRANCH: changelog-issue-${{ github.event.issue.number }}
         run: |
           NL=$'\n'
           RESULT=""
@@ -171,7 +172,13 @@ jobs:
           if [ "$DEV_TYPE" = "api-only" ] || [ "$DEV_TYPE" = "both" ]; then
             if [ "$API_HAS" = "true" ]; then
               cd APIMagic
-              PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+              EXISTING_PR=$(gh pr list --head $BRANCH --state open --json number,url -q '.[0].url' 2>/dev/null || echo "")
+              if [ -n "$EXISTING_PR" ]; then
+                PR="$EXISTING_PR"
+                echo "PR already exists: $PR"
+              else
+                PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+              fi
               cd ..
               RESULT="${RESULT}APIMagic PR: $PR${NL}"
             else
@@ -181,7 +188,13 @@ jobs:
           if [ "$DEV_TYPE" = "frontend-only" ] || [ "$DEV_TYPE" = "both" ]; then
             if [ "$FRONTEND_HAS" = "true" ]; then
               cd datastat-website
-              PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+              EXISTING_PR=$(gh pr list --head $BRANCH --state open --json number,url -q '.[0].url' 2>/dev/null || echo "")
+              if [ -n "$EXISTING_PR" ]; then
+                PR="$EXISTING_PR"
+                echo "PR already exists: $PR"
+              else
+                PR=$(gh pr create --title "Implement issue #${ISSUE_NUMBER}" --body "$PR_BODY_TEMPLATE" --base main)
+              fi
               cd ..
               RESULT="${RESULT}datastat-website PR: $PR${NL}"
             else
