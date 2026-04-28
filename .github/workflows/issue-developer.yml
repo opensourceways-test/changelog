@@ -68,15 +68,17 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           DB_HOST: 10.0.0.58
-        run: |
+run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd APIMagic
+          git checkout -- . 2>/dev/null || true
+          git clean -fd 2>/dev/null || true
           git fetch origin $BRANCH 2>/dev/null || true
           if git show-ref --verify --quiet refs/remotes/origin/$BRANCH; then
-            git checkout $BRANCH
+            git checkout -f $BRANCH
             git pull origin $BRANCH --rebase || git pull origin $BRANCH
           else
-            git checkout -b $BRANCH
+            git checkout -f -b $BRANCH
           fi
           git config --global --add safe.directory $GITHUB_WORKSPACE/APIMagic
           
@@ -117,12 +119,14 @@ jobs:
         run: |
           BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd datastat-website
+          git checkout -- . 2>/dev/null || true
+          git clean -fd 2>/dev/null || true
           git fetch origin $BRANCH 2>/dev/null || true
           if git show-ref --verify --quiet refs/remotes/origin/$BRANCH; then
-            git checkout $BRANCH
+            git checkout -f $BRANCH
             git pull origin $BRANCH --rebase || git pull origin $BRANCH
           else
-            git checkout -b $BRANCH
+            git checkout -f -b $BRANCH
           fi
           git config --global --add safe.directory $GITHUB_WORKSPACE/datastat-website
           
