@@ -42,6 +42,11 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
         shell: bash
 
+      - name: Pre-cleanup workspace
+        run: |
+          sudo rm -rf $GITHUB_WORKSPACE/APIMagic $GITHUB_WORKSPACE/datastat-website 2>/dev/null || true
+        shell: bash
+
       - name: Fetch issue
         uses: ./.github/actions/fetch-issue
         with:
