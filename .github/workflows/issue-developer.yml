@@ -79,6 +79,7 @@ jobs:
           参考 CLAUDE.md 和现有 .ms 文件格式，创建/修改 magic-api/api/ 下的接口文件。" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
           
           git checkout -- .github/workflows/ 2>/dev/null || true
+          make insert 2>/dev/null || true
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "API for issue #$ISSUE_NUMBER"
