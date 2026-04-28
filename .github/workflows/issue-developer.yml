@@ -58,7 +58,7 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          BRANCH="issue-$ISSUE_NUMBER-api"
+          BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd APIMagic
           git checkout -b $BRANCH 2>/dev/null || git checkout $BRANCH
           git config --global --add safe.directory $GITHUB_WORKSPACE/APIMagic
@@ -95,7 +95,7 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          BRANCH="issue-$ISSUE_NUMBER-frontend"
+          BRANCH="changelog-issue-$ISSUE_NUMBER"
           cd datastat-website
           git checkout -b $BRANCH 2>/dev/null || git checkout $BRANCH
           git config --global --add safe.directory $GITHUB_WORKSPACE/datastat-website
