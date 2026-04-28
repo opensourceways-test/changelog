@@ -24,7 +24,7 @@ runs:
       run: |
         TITLE=$(gh issue view ${{ inputs.issue-number }} --json title -q '.title')
         BODY=$(gh issue view ${{ inputs.issue-number }} --json body -q '.body')
-        COMMENTS=$(gh issue view ${{ inputs.issue-number }} --json comments -q '.[].body' | grep -v '<!-- REQUIREMENTS_DOC -->' | grep -v '<!-- DESIGN_DOC -->' || true)
+        COMMENTS=$(gh issue view ${{ inputs.issue-number }} --json comments -q '.[].body' || true)
         mkdir -p /tmp/opencode
         {
           printf "Issue #%s: %s\n\n%s" "${{ inputs.issue-number }}" "$TITLE" "$BODY"
