@@ -3,6 +3,8 @@ name: Issue Developer
 on:
   issues:
     types: [labeled]
+  issue_comment:
+    types: [created]
 
 concurrency:
   group: issue-developer-${{ github.event.issue.number }}
@@ -15,7 +17,9 @@ permissions:
 
 jobs:
   develop:
-    if: github.event.label.name == 'approved' && github.event.issue.state == 'open'
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'approved' && github.event.issue.state == 'open') ||
+      (github.event_name == 'issue_comment' && github.event.issue.state == 'open' && contains(github.event.comment.body, '/develop'))
     runs-on: self-hosted
     container:
       image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
@@ -37,6 +41,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
         shell: bash
+
+      - name: Fetch issue
+        uses: ./.github/actions/fetch-issue
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          github-token: ${{ github.token }}
 
       - name: Extract design documents
         id: extract
@@ -65,18 +75,20 @@ jobs:
           
           DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
           REQ=$(cat /tmp/opencode/requirements.md 2>/dev/null || echo "")
-          TITLE=$(cat /tmp/opencode/title.txt 2>/dev/null || echo "")
-          BODY=$(cat /tmp/opencode/body.txt 2>/dev/null || echo "")
+          ISSUE_CONTENT=$(cat /tmp/opencode/issue.txt 2>/dev/null || echo "")
           
-          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发 API：
+          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发/调整 API：
 
-          Issue: $TITLE
-          $BODY
+          Issue 内容（包含用户评论）：
+          $ISSUE_CONTENT
           
           设计方案: $DESIGN
           需求分析: $REQ
 
-          参考 CLAUDE.md 和现有 .ms 文件格式，创建/修改 magic-api/api/ 下的接口文件。" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          要求：
+          1. 参考 CLAUDE.md 和现有 .ms 文件格式
+          2. 如用户评论中有修改意见，基于已有代码进行调整
+          3. 创建/修改 magic-api/api/ 下的接口文件" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
           
           git checkout -- .github/workflows/ 2>/dev/null || true
           make insert 2>/dev/null || true
@@ -103,18 +115,20 @@ jobs:
           
           DESIGN=$(cat /tmp/opencode/design.md 2>/dev/null || echo "")
           REQ=$(cat /tmp/opencode/requirements.md 2>/dev/null || echo "")
-          TITLE=$(cat /tmp/opencode/title.txt 2>/dev/null || echo "")
-          BODY=$(cat /tmp/opencode/body.txt 2>/dev/null || echo "")
+          ISSUE_CONTENT=$(cat /tmp/opencode/issue.txt 2>/dev/null || echo "")
           
-          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发前端：
+          [ -n "$DESIGN" ] && [ -n "$REQ" ] && opencode run "根据设计文档开发/调整前端：
 
-          Issue: $TITLE
-          $BODY
+          Issue 内容（包含用户评论）：
+          $ISSUE_CONTENT
           
           设计方案: $DESIGN
           需求分析: $REQ
 
-          参考 CLAUDE.md 目录结构，修改对应的 Vue 组件。" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
+          要求：
+          1. 参考 CLAUDE.md 目录结构
+          2. 如用户评论中有修改意见，基于已有代码进行调整
+          3. 修改对应的 Vue 组件" --model alibaba-cn/glm-5 --agent build --dangerously-skip-permissions --thinking=false || true
           
           git checkout -- .github/workflows/ 2>/dev/null || true
           if [ -n "$(git status --porcelain)" ]; then
