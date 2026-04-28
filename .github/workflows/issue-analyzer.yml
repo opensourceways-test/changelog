@@ -18,7 +18,7 @@ jobs:
   analyze:
     if: |
       (github.event_name == 'issues' && github.event.label.name == 'accept' && github.event.issue.state == 'open') ||
-      (github.event_name == 'issue_comment' && github.event.issue.state == 'open' && contains(github.event.comment.body, '/reanalyze'))
+      (github.event_name == 'issue_comment' && github.event.issue.state == 'open' && contains(github.event.comment.body, '/analyze'))
     runs-on: self-hosted
     container:
       image: ghcr.io/${{ github.repository_owner }}/opencode-dev:latest
