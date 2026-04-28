@@ -193,7 +193,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          DEV_TYPE: ${{ steps.extract.outputs.dev-type }}
+          DEV_TYPE: ${{ steps.final-type.outputs.dev_type }}
           API_HAS: ${{ steps.api.outputs.has_changes }}
           FRONTEND_HAS: ${{ steps.frontend.outputs.has_changes }}
           REPO_OWNER: ${{ github.repository_owner }}
